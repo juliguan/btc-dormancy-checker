@@ -54,11 +54,23 @@ st.markdown(
 
 st.title("₿ BTC Dormancy Checker")
 st.caption("Vind bankregels die naar een bekende crypto-dienst gingen.")
+st.info(
+    "🔒 **Open-source hulpmiddel om je eigen (mogelijk vergeten) bitcoin-wallet "
+    "terug te vinden** — geen dienst waar je bankdata naartoe gestuurd wordt. "
+    "Deze app draait volledig lokaal op jouw computer: een geüploade CSV blijft "
+    "in het geheugen van dit proces, wordt nergens naar een server gestuurd en "
+    "komt nooit in de GitHub-repository terecht. Bekijk de broncode gerust voor "
+    "je 'm met echte data gebruikt.",
+    icon="🔒",
+)
 
 with st.sidebar:
     st.header("Invoer")
     uploaded_file = st.file_uploader("Bank-CSV (datum, bedrag_eur, omschrijving)", type=["csv"])
     use_example = st.button("Gebruik voorbeeld-CSV", use_container_width=True)
+    st.caption(
+        "Alleen lokale verwerking — zie de privacy-uitleg hierboven en in de README."
+    )
 
     st.divider()
     st.header("Filters")

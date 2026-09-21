@@ -11,6 +11,41 @@ tijd-heuristieken; het resultaat is een geordende lijst kandidaten die je zelf
 handmatig moet verifiëren (bv. via een block explorer) voordat je concludeert
 dat een adres "het" adres is.
 
+Er zit ook een losstaand **Streamlit-dashboard** ([`app.py`](app.py)) bij: upload
+je bankafschrift en zie direct welke regels vermoedelijk naar een crypto-dienst
+gingen (Bitonic, LiteBit, Bitvavo, ...), met grafieken en een exporteerbare
+tabel. Zie [Dashboard gebruiken](#dashboard-gebruiken) hieronder.
+
+## Waarom open source, en is mijn bankdata hier veilig?
+
+Deze tool is bedoeld als hulpmiddel om je **eigen, mogelijk vergeten
+bitcoin-wallet** terug te vinden — niet als dienst waar je je bankdata aan
+toevertrouwt. Precies dáárom is de code open source: je stopt hier potentieel
+gevoelige financiële data in, en dat doe je alleen met een gerust hart als je
+(of iemand die het voor je kan lezen) kan controleren dat er niets stiekem
+wordt weggestuurd. Achter gesloten code zou dat nooit te verifiëren zijn.
+
+Concreet, hoe de data stroomt:
+
+- **Alles draait lokaal op je eigen computer.** Als je `streamlit run app.py`
+  of `python -m btc_dormancy.cli` start, loopt dat proces op jouw machine. Er
+  is geen server van deze tool waar iets naartoe gestuurd wordt.
+- **GitHub bevat alleen de broncode**, nooit jouw data. Een CSV die je in het
+  dashboard upload wordt in een tijdelijk bestand op je eigen schijf gezet
+  (buiten de projectmap) en nergens gecommit of gepusht — `.gitignore` sluit
+  bovendien `.env` en outputbestanden expliciet uit, mocht je zelf per ongeluk
+  iets in de projectmap zetten.
+- **De enige uitgaande netwerkverzoeken** gaan naar de publieke, gratis
+  API's van blockchain.info, frankfurter.app, mempool.space en CoinGecko (zie
+  hieronder) — en die krijgen alleen datums, bedragen-in-BTC en de door jou
+  ingevulde Bitonic-adressen te zien, nooit je bankomschrijvingen, IBAN of
+  andere persoonsgegevens uit je CSV.
+- **Wil je het dashboard online delen** (bv. via Streamlit Community Cloud)
+  in plaats van lokaal draaien? Doe dat dan niet met je eigen echte bankdata —
+  op een gedeelde/publieke server verwerkt de tool je upload op die server, en
+  dat is een andere vertrouwensrelatie dan "het draait alleen op mijn eigen
+  laptop". Voor je eigen data: lokaal draaien.
+
 ## Hoe het werkt (pipeline)
 
 1. **Bank-CSV inlezen** (`datum,bedrag_eur,omschrijving`), gefilterd op de
@@ -133,6 +168,20 @@ die te achterhalen:
   hot-wallet-adressen identificeren.
 
 Je kunt ook een ander bestand gebruiken via `--addresses-file`.
+
+## Dashboard gebruiken
+
+```bash
+.venv/bin/streamlit run app.py
+```
+
+Dit opent lokaal (standaard `http://localhost:8501`) een donker dashboard
+waar je een bank-CSV kan uploaden (of de meegeleverde voorbeeld-CSV kan
+gebruiken) en direct ziet welke regels matchen met een bekende crypto-dienst
+uit [`config/crypto_companies.json`](config/crypto_companies.json), inclusief
+totalen, grafieken per bedrijf/tijd en een downloadbare CSV. Zie
+["Waarom open source, en is mijn bankdata hier veilig?"](#waarom-open-source-en-is-mijn-bankdata-hier-veilig)
+hierboven voor hoe de data daarbij wordt verwerkt.
 
 ## Gebruik
 
