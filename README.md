@@ -183,6 +183,22 @@ totalen, grafieken per bedrijf/tijd en een downloadbare CSV. Zie
 ["Waarom open source, en is mijn bankdata hier veilig?"](#waarom-open-source-en-is-mijn-bankdata-hier-veilig)
 hierboven voor hoe de data daarbij wordt verwerkt.
 
+Het dashboard heeft ook een **taalwissel** (Nederlands/Engels) bovenaan de
+sidebar, en een tweede pagina **"Kandidaat zoeken"** die dezelfde pipeline als
+`btc_dormancy.cli` in de browser draait (zie hieronder).
+
+### Demo met een echte, werkende match
+
+Placeholder-adressen leveren altijd 0 kandidaten op — logisch, die bestaan
+niet echt. Om te zien dat de zoekmachinerie zelf werkt, staat er een demo
+klaar die een **echt, publiek Bitcoin-adres met echte transacties** gebruikt
+(dus geen verzonnen data): [`data/demo_werkende_match.csv`](data/demo_werkende_match.csv)
++ de `"demo"`-dienst in `config/known_addresses.json`. Selecteer op de
+"Kandidaat zoeken"-pagina de dienst **demo** en upload dat CSV-bestand (of
+gebruik het via `--service demo` op de CLI) — dat levert gegarandeerd 1
+kandidaat op. Dit adres heeft niets met Bitonic te maken; het is puur om de
+mechaniek te demonstreren.
+
 ## Gebruik
 
 **Fase A — alleen bankdata + koersconversie** (handig om te testen zonder de

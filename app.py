@@ -16,6 +16,7 @@ import streamlit as st
 
 from btc_dormancy.bank_csv import load_dashboard_rows
 from btc_dormancy.crypto_detector import detect_crypto_transactions, load_crypto_companies
+from btc_dormancy.translations import language_selector, t
 
 PROJECT_ROOT = Path(__file__).resolve().parent
 EXAMPLE_CSV = PROJECT_ROOT / "data" / "voorbeeld_transacties.csv"
@@ -67,34 +68,27 @@ st.markdown(
     unsafe_allow_html=True,
 )
 
-st.title("₿ BTC Dormancy Checker")
-st.caption("Vind bankregels die naar een bekende crypto-dienst gingen.")
-st.info(
-    "🔒 **Open-source hulpmiddel om je eigen (mogelijk vergeten) bitcoin-wallet "
-    "terug te vinden** — geen dienst waar je bankdata naartoe gestuurd wordt. "
-    "Deze app draait volledig lokaal op jouw computer: een geüploade CSV blijft "
-    "in het geheugen van dit proces, wordt nergens naar een server gestuurd en "
-    "komt nooit in de GitHub-repository terecht. Bekijk de broncode gerust voor "
-    "je 'm met echte data gebruikt.",
-    icon="🔒",
-)
+with st.sidebar:
+    language_selector()
+
+st.title(t("app_title"))
+st.caption(t("app_caption"))
+st.info(t("privacy_info"), icon="🔒")
 
 if "csv_mode" not in st.session_state:
     st.session_state.csv_mode = None  # None | "upload" | "example"
 
 with st.sidebar:
-    st.header("Invoer")
-    uploaded_file = st.file_uploader("Bank-CSV (datum, bedrag_eur, omschrijving)", type=["csv"])
+    st.header(t("sidebar_input_header"))
+    uploaded_file = st.file_uploader(t("upload_label"), type=["csv"])
     if uploaded_file is not None:
         st.session_state.csv_mode = "upload"
-    if st.button("Gebruik voorbeeld-CSV", width="stretch"):
+    if st.button(t("example_button"), width="stretch"):
         st.session_state.csv_mode = "example"
-    st.caption(
-        "Alleen lokale verwerking — zie de privacy-uitleg hierboven en in de README."
-    )
+    st.caption(t("local_only_caption"))
 
     st.divider()
-    st.header("Filters")
+    st.header(t("filters_header"))
 
     try:
         all_companies = load_crypto_companies()
@@ -104,14 +98,11 @@ with st.sidebar:
 
     company_names = [c.naam for c in all_companies]
     selected_names = st.multiselect(
-        "Crypto-bedrijven", company_names, default=company_names
+        t("companies_label"), company_names, default=company_names
     )
 
     st.divider()
-    st.caption(
-        "Bedrijvenlijst en herkenningspatronen zijn instelbaar in "
-        "`config/crypto_companies.json`."
-    )
+    st.caption(t("companies_config_caption"))
 
 
 def _resolve_csv_source() -> Path | io.StringIO | None:
@@ -162,14 +153,14 @@ def build_timeline_chart(df_sorted: pd.DataFrame, heeft_tijd: bool) -> go.Figure
     continue reeks) — vandaar losse balken i.p.v. een lijn/vlakgrafiek."""
 
     x = df_sorted["Moment"]
-    y = df_sorted["Bedrag (EUR)"]
+    y = df_sorted[t("col_amount")]
     gemiddelde = float(y.mean())
 
     hovertemplate = (
         "<b>%{customdata[0]}</b><br>"
         "€ %{y:,.2f} — %{customdata[1]}<extra></extra>"
     )
-    customdata = df_sorted[["Bedrijf", "Omschrijving"]].to_numpy()
+    customdata = df_sorted[[t("col_company"), t("col_description")]].to_numpy()
 
     fig = go.Figure()
     fig.add_trace(go.Bar(
@@ -184,7 +175,7 @@ def build_timeline_chart(df_sorted: pd.DataFrame, heeft_tijd: bool) -> go.Figure
     ))
     fig.add_annotation(
         x=x.max(), y=gemiddelde, xanchor="right", yanchor="bottom",
-        text=f"gemiddeld: € {gemiddelde:,.2f}", showarrow=False,
+        text=f"{t('avg_label')}: € {gemiddelde:,.2f}", showarrow=False,
         font=dict(color=CMC_TEXT, size=11),
     )
 
@@ -212,32 +203,22 @@ def build_bar_chart(per_bedrijf: pd.Series) -> go.Figure:
 csv_source = _resolve_csv_source()
 
 if csv_source is None:
-    st.info(
-        "Upload links een bank-CSV, of klik op **Gebruik voorbeeld-CSV** om de "
-        "dashboard meteen te proberen.\n\n"
-        "Verwacht formaat:\n```csv\ndatum,bedrag_eur,omschrijving\n"
-        "2013-11-15,50.00,Bitonic BTC aankoop\n```\n\n"
-        "Bevat je `datum`-kolom ook een tijd (bv. `2013-11-15 14:32`)? Dan "
-        "wordt die getoond in de grafieken — handig om transacties exact te "
-        "kunnen natrekken."
-    )
+    st.info(t("upload_prompt"))
     st.stop()
 
 try:
     dashboard_rows = load_dashboard_rows(csv_source)
 except Exception as exc:
-    st.error(f"Kan CSV niet inlezen: {exc}")
+    st.error(t("csv_read_error", exc=exc))
     st.stop()
 
 active_companies = [c for c in all_companies if c.naam in selected_names]
 detected = detect_crypto_transactions(dashboard_rows, active_companies)
 
-st.subheader("Resultaat")
+st.subheader(t("result_header"))
 
 if not detected:
-    st.warning(
-        f"Geen van de {len(dashboard_rows)} bankregel(s) matcht een geselecteerd crypto-bedrijf."
-    )
+    st.warning(t("no_match_warning", n=len(dashboard_rows)))
     st.stop()
 
 heeft_tijd = any(d.bank_row.heeft_tijd for d in detected)
@@ -246,58 +227,49 @@ df = pd.DataFrame(
     [
         {
             "Moment": d.bank_row.moment,
-            "Bedrag (EUR)": d.bank_row.bedrag_eur,
-            "Omschrijving": d.bank_row.omschrijving,
-            "Bedrijf": d.bedrijf,
+            t("col_amount"): d.bank_row.bedrag_eur,
+            t("col_description"): d.bank_row.omschrijving,
+            t("col_company"): d.bedrijf,
         }
         for d in detected
     ]
 ).sort_values("Moment")
 
 col1, col2, col3 = st.columns(3)
-col1.metric("Gedetecteerde transacties", len(df))
-col2.metric("Totaalbedrag", f"€ {df['Bedrag (EUR)'].sum():,.2f}")
-col3.metric("Unieke bedrijven", df["Bedrijf"].nunique())
+col1.metric(t("metric_detected"), len(df))
+col2.metric(t("metric_total"), f"€ {df[t('col_amount')].sum():,.2f}")
+col3.metric(t("metric_unique"), df[t("col_company")].nunique())
 
 if not heeft_tijd:
-    st.caption(
-        "ℹ️ Geen tijd-component gevonden in de `datum`-kolom — punten hieronder "
-        "staan op middernacht. Voeg een tijd toe aan je CSV (bv. "
-        "`2013-11-15 14:32`) voor preciezere weergave."
-    )
+    st.caption(t("no_time_caption"))
 
-st.markdown("#### Bedrag per bedrijf")
-per_bedrijf = df.groupby("Bedrijf")["Bedrag (EUR)"].sum().sort_values(ascending=False)
+st.markdown(t("chart_per_company"))
+per_bedrijf = df.groupby(t("col_company"))[t("col_amount")].sum().sort_values(ascending=False)
 st.plotly_chart(build_bar_chart(per_bedrijf), width="stretch", config={"displayModeBar": False})
 
-st.markdown("#### Transacties over tijd")
+st.markdown(t("chart_over_time"))
 st.plotly_chart(build_timeline_chart(df, heeft_tijd), width="stretch", config={"displayModeBar": False})
 
-st.markdown("#### Alle gedetecteerde transacties")
-tabel_df = df.rename(columns={"Moment": "Datum & tijd"})
+st.markdown(t("table_header"))
+tabel_df = df.rename(columns={"Moment": t("col_datetime")})
 st.dataframe(
     tabel_df,
     width="stretch",
     hide_index=True,
     column_config={
-        "Bedrag (EUR)": st.column_config.NumberColumn(format="€ %.2f"),
-        "Datum & tijd": st.column_config.DatetimeColumn(
+        t("col_amount"): st.column_config.NumberColumn(format="€ %.2f"),
+        t("col_datetime"): st.column_config.DatetimeColumn(
             format="YYYY-MM-DD HH:mm" if heeft_tijd else "YYYY-MM-DD"
         ),
     },
 )
 
 st.download_button(
-    "Download als CSV",
+    t("download_button"),
     tabel_df.to_csv(index=False).encode("utf-8"),
     file_name="gedetecteerde_crypto_transacties.csv",
     mime="text/csv",
     width="content",
 )
 
-st.caption(
-    "Dit is een herkenning op basis van tekstpatronen in de omschrijving, "
-    "geen definitieve match. Wil je ook zien welk bitcoin-adres een aankoop "
-    "ontving en of dat adres nog dormant is? Gebruik de volledige pipeline "
-    "via `python -m btc_dormancy.cli` (zie README)."
-)
+st.caption(t("footer_caption"))
