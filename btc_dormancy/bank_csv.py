@@ -109,32 +109,45 @@ def _detect_format(fieldnames: List[str] | None) -> str:
 _EXTRACTORS = {"generic": _extract_generic, "ing": _extract_ing}
 
 
-def load_bank_rows(csv_path: Path, service_filter: str | None = None) -> List[BankRow]:
+def _read_bank_rows(f: TextIO, service_filter: str | None) -> List[BankRow]:
+    rows: List[BankRow] = []
+    reader = csv.DictReader(f)
+    extract = _EXTRACTORS[_detect_format(reader.fieldnames)]
+
+    for i, raw_row in enumerate(reader):
+        normalized = {k.strip().lower(): v for k, v in raw_row.items()}
+        datum_str, bedrag_str, omschrijving = extract(normalized)
+
+        if service_filter and service_filter.lower() not in omschrijving.lower():
+            continue
+
+        rows.append(
+            BankRow(
+                row_index=i,
+                datum=_parse_date(datum_str),
+                bedrag_eur=_parse_bedrag(bedrag_str),
+                omschrijving=omschrijving,
+            )
+        )
+    return rows
+
+
+def load_bank_rows(
+    csv_source: Union[Path, str, TextIO], service_filter: str | None = None
+) -> List[BankRow]:
     """Leest de bank-CSV in (generiek of ING-formaat, zie module-docstring).
     Als service_filter is opgegeven, worden alleen regels behouden waarvan de
-    omschrijving die naam bevat (case-insensitive)."""
+    omschrijving die naam bevat (case-insensitive).
 
-    rows: List[BankRow] = []
-    with open(csv_path, "r", encoding="utf-8-sig", newline="") as f:
-        reader = csv.DictReader(f)
-        extract = _EXTRACTORS[_detect_format(reader.fieldnames)]
+    `csv_source` mag een bestandspad zijn, of een al-geopende tekst-stream
+    (bv. `io.StringIO`) — zie load_dashboard_rows voor waarom (een upload in
+    het dashboard hoeft zo nooit naar schijf geschreven te worden)."""
 
-        for i, raw_row in enumerate(reader):
-            normalized = {k.strip().lower(): v for k, v in raw_row.items()}
-            datum_str, bedrag_str, omschrijving = extract(normalized)
+    if hasattr(csv_source, "read"):
+        return _read_bank_rows(csv_source, service_filter)  # type: ignore[arg-type]
 
-            if service_filter and service_filter.lower() not in omschrijving.lower():
-                continue
-
-            rows.append(
-                BankRow(
-                    row_index=i,
-                    datum=_parse_date(datum_str),
-                    bedrag_eur=_parse_bedrag(bedrag_str),
-                    omschrijving=omschrijving,
-                )
-            )
-    return rows
+    with open(csv_source, "r", encoding="utf-8-sig", newline="") as f:
+        return _read_bank_rows(f, service_filter)
 
 
 def _read_dashboard_rows(f: TextIO) -> List[DashboardRow]:

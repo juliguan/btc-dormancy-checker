@@ -39,6 +39,18 @@ def load_settings(env_path: Path | None = None) -> Settings:
     )
 
 
+def list_known_services(addresses_path: Path | None = None) -> List[str]:
+    """Geeft de dienst-namen (bv. 'bitonic') terug die in known_addresses.json
+    geconfigureerd zijn — gebruikt door het dashboard om een keuzelijst te tonen."""
+
+    path = addresses_path or (PROJECT_ROOT / "config" / "known_addresses.json")
+    if not path.exists():
+        return []
+    with open(path, "r", encoding="utf-8") as f:
+        data = json.load(f)
+    return list(data.keys())
+
+
 def load_hot_wallets(service: str, addresses_path: Path | None = None) -> List[str]:
     """Laadt de lijst met bekende hot-wallet adressen voor een dienst (bv. 'bitonic')
     uit config/known_addresses.json. Zie README.md voor hoe je deze lijst aanvult."""

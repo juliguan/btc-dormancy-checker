@@ -79,10 +79,16 @@ st.info(
     icon="🔒",
 )
 
+if "csv_mode" not in st.session_state:
+    st.session_state.csv_mode = None  # None | "upload" | "example"
+
 with st.sidebar:
     st.header("Invoer")
     uploaded_file = st.file_uploader("Bank-CSV (datum, bedrag_eur, omschrijving)", type=["csv"])
-    use_example = st.button("Gebruik voorbeeld-CSV", width="stretch")
+    if uploaded_file is not None:
+        st.session_state.csv_mode = "upload"
+    if st.button("Gebruik voorbeeld-CSV", width="stretch"):
+        st.session_state.csv_mode = "example"
     st.caption(
         "Alleen lokale verwerking — zie de privacy-uitleg hierboven en in de README."
     )
@@ -115,10 +121,10 @@ def _resolve_csv_source() -> Path | io.StringIO | None:
     de meegeleverde voorbeeld-CSV (onderdeel van deze repo) is een echt pad
     op schijf."""
 
-    if uploaded_file is not None:
+    if st.session_state.csv_mode == "upload" and uploaded_file is not None:
         tekst = uploaded_file.getvalue().decode("utf-8-sig")
         return io.StringIO(tekst)
-    if use_example:
+    if st.session_state.csv_mode == "example":
         return EXAMPLE_CSV
     return None
 
