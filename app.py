@@ -190,6 +190,12 @@ def build_bar_chart(per_bedrijf: pd.Series) -> go.Figure:
         marker_cornerradius=6,
         hovertemplate="<b>%{x}</b><br>€ %{y:,.2f}<extra></extra>",
     ))
+    # Bij weinig categorieën een grotere bargap, anders vult 1-2 balken de
+    # hele breedte van de grafiek (ziet er lomp uit); bij veel bedrijven juist
+    # een kleinere gap zodat de balken niet te dun worden.
+    aantal = len(per_bedrijf)
+    bargap = 0.6 if aantal <= 2 else 0.4 if aantal <= 4 else 0.2
+    fig.update_layout(bargap=bargap)
     return _base_layout(fig)
 
 
