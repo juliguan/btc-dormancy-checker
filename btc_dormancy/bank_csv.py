@@ -1,15 +1,26 @@
-"""Inlezen van de bank-CSV (datum, bedrag_eur, omschrijving)."""
+"""Inlezen van de bank-CSV.
+
+Ondersteunt twee formaten:
+- Generiek: kolommen `datum`, `bedrag_eur`, `omschrijving` (zie
+  data/voorbeeld_transacties.csv).
+- ING-export: de standaard CSV-download uit de ING-app/mijn.ing.nl, met
+  kolommen als `Datum`, `Naam / Omschrijving`, `Af Bij`, `Bedrag (EUR)`,
+  `Mededelingen`. Wordt automatisch gedetecteerd aan de kolomkoppen.
+
+Wil je een ander bank-formaat toevoegen? Stuur de kolomkoppen (headerregel,
+geen echte transacties nodig) en er kan een extra `_extract_...`-functie bij.
+"""
 
 from __future__ import annotations
 
 import csv
 from datetime import date, datetime
 from pathlib import Path
-from typing import List, TextIO, Union
+from typing import Dict, List, TextIO, Tuple, Union
 
 from .models import BankRow, DashboardRow
 
-_DATE_FORMATS = ("%Y-%m-%d", "%d-%m-%Y", "%d/%m/%Y")
+_DATE_FORMATS = ("%Y-%m-%d", "%d-%m-%Y", "%d/%m/%Y", "%Y%m%d")
 
 # Met tijd-component, voor de dashboard-charts (zie parse_datetime_flexible).
 _DATETIME_FORMATS = (
@@ -23,6 +34,9 @@ _DATETIME_FORMATS = (
     "%d/%m/%Y %H:%M",
 )
 
+_GENERIC_COLUMNS = {"datum", "bedrag_eur", "omschrijving"}
+_ING_COLUMNS = {"datum", "naam / omschrijving", "af bij", "bedrag (eur)"}
+
 
 def _parse_date(raw: str) -> date:
     raw = raw.strip()
@@ -33,7 +47,7 @@ def _parse_date(raw: str) -> date:
             continue
     raise ValueError(
         f"Kan datum '{raw}' niet parsen. Ondersteunde formaten: "
-        "YYYY-MM-DD, DD-MM-YYYY, DD/MM/YYYY."
+        "YYYY-MM-DD, DD-MM-YYYY, DD/MM/YYYY, YYYYMMDD."
     )
 
 
@@ -58,27 +72,56 @@ def _parse_bedrag(raw: str) -> float:
         raw = raw.replace(".", "").replace(",", ".")
     elif "," in raw:
         raw = raw.replace(",", ".")
-    return float(raw)
+    return abs(float(raw))
+
+
+def _extract_generic(normalized: Dict[str, str]) -> Tuple[str, str, str]:
+    omschrijving = (normalized.get("omschrijving") or "").strip()
+    return normalized["datum"], normalized["bedrag_eur"], omschrijving
+
+
+def _extract_ing(normalized: Dict[str, str]) -> Tuple[str, str, str]:
+    # ING geeft het bedrag altijd als positief getal en de richting apart via
+    # 'Af Bij' ('Af' = uitgaand, 'Bij' = inkomend). Voor deze tool (bedragen
+    # matchen op crypto-aankopen) is de richting zelf niet nodig, alleen de
+    # herkenning in de tekst — dus 'Naam / Omschrijving' en 'Mededelingen'
+    # samenvoegen geeft de beste kans om bv. 'Bitonic' of 'LiteBit' te vinden,
+    # ongeacht in welk van de twee velden ING dat zet.
+    naam = (normalized.get("naam / omschrijving") or "").strip()
+    mededelingen = (normalized.get("mededelingen") or "").strip()
+    omschrijving = f"{naam} {mededelingen}".strip()
+    return normalized["datum"], normalized["bedrag (eur)"], omschrijving
+
+
+def _detect_format(fieldnames: List[str] | None) -> str:
+    cols = set(h.strip().lower() for h in (fieldnames or []))
+    if _GENERIC_COLUMNS <= cols:
+        return "generic"
+    if _ING_COLUMNS <= cols:
+        return "ing"
+    raise ValueError(
+        f"Onbekend CSV-formaat. Verwacht ofwel de kolommen {sorted(_GENERIC_COLUMNS)} "
+        f"(generiek), ofwel een ING-export met kolommen als {sorted(_ING_COLUMNS)}. "
+        f"Gevonden kolommen: {fieldnames}"
+    )
+
+
+_EXTRACTORS = {"generic": _extract_generic, "ing": _extract_ing}
 
 
 def load_bank_rows(csv_path: Path, service_filter: str | None = None) -> List[BankRow]:
-    """Leest de bank-CSV in. Als service_filter is opgegeven, worden alleen
-    regels behouden waarvan de omschrijving die naam bevat (case-insensitive)."""
+    """Leest de bank-CSV in (generiek of ING-formaat, zie module-docstring).
+    Als service_filter is opgegeven, worden alleen regels behouden waarvan de
+    omschrijving die naam bevat (case-insensitive)."""
 
     rows: List[BankRow] = []
     with open(csv_path, "r", encoding="utf-8-sig", newline="") as f:
         reader = csv.DictReader(f)
-        required = {"datum", "bedrag_eur", "omschrijving"}
-        missing = required - set(h.strip().lower() for h in (reader.fieldnames or []))
-        if missing:
-            raise ValueError(
-                f"CSV mist verplichte kolommen: {missing}. "
-                f"Gevonden kolommen: {reader.fieldnames}"
-            )
+        extract = _EXTRACTORS[_detect_format(reader.fieldnames)]
 
         for i, raw_row in enumerate(reader):
             normalized = {k.strip().lower(): v for k, v in raw_row.items()}
-            omschrijving = (normalized.get("omschrijving") or "").strip()
+            datum_str, bedrag_str, omschrijving = extract(normalized)
 
             if service_filter and service_filter.lower() not in omschrijving.lower():
                 continue
@@ -86,8 +129,8 @@ def load_bank_rows(csv_path: Path, service_filter: str | None = None) -> List[Ba
             rows.append(
                 BankRow(
                     row_index=i,
-                    datum=_parse_date(normalized["datum"]),
-                    bedrag_eur=_parse_bedrag(normalized["bedrag_eur"]),
+                    datum=_parse_date(datum_str),
+                    bedrag_eur=_parse_bedrag(bedrag_str),
                     omschrijving=omschrijving,
                 )
             )
@@ -97,25 +140,19 @@ def load_bank_rows(csv_path: Path, service_filter: str | None = None) -> List[Ba
 def _read_dashboard_rows(f: TextIO) -> List[DashboardRow]:
     rows: List[DashboardRow] = []
     reader = csv.DictReader(f)
-    required = {"datum", "bedrag_eur", "omschrijving"}
-    missing = required - set(h.strip().lower() for h in (reader.fieldnames or []))
-    if missing:
-        raise ValueError(
-            f"CSV mist verplichte kolommen: {missing}. "
-            f"Gevonden kolommen: {reader.fieldnames}"
-        )
+    extract = _EXTRACTORS[_detect_format(reader.fieldnames)]
 
     for i, raw_row in enumerate(reader):
         normalized = {k.strip().lower(): v for k, v in raw_row.items()}
-        omschrijving = (normalized.get("omschrijving") or "").strip()
-        moment, heeft_tijd = parse_datetime_flexible(normalized["datum"])
+        datum_str, bedrag_str, omschrijving = extract(normalized)
+        moment, heeft_tijd = parse_datetime_flexible(datum_str)
 
         rows.append(
             DashboardRow(
                 row_index=i,
                 moment=moment,
                 heeft_tijd=heeft_tijd,
-                bedrag_eur=_parse_bedrag(normalized["bedrag_eur"]),
+                bedrag_eur=_parse_bedrag(bedrag_str),
                 omschrijving=omschrijving,
             )
         )
