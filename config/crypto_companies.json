@@ -1,0 +1,15 @@
+{
+  "_comment": "Naam-patronen (case-insensitive substring match) waarop de omschrijving van een bankregel wordt gescand om te herkennen dat een transactie naar een crypto-dienst ging. Vul zelf aan met bedrijven/spellingsvarianten die in jouw bankafschriften voorkomen.",
+  "companies": [
+    { "naam": "Bitonic", "patronen": ["bitonic"] },
+    { "naam": "LiteBit", "patronen": ["litebit", "lite bit"] },
+    { "naam": "Bitvavo", "patronen": ["bitvavo"] },
+    { "naam": "Anycoin Direct", "patronen": ["anycoin"] },
+    { "naam": "BTC Direct", "patronen": ["btc direct", "btcdirect"] },
+    { "naam": "Coinbase", "patronen": ["coinbase"] },
+    { "naam": "Binance", "patronen": ["binance"] },
+    { "naam": "Kraken", "patronen": ["kraken"] },
+    { "naam": "Bitstamp", "patronen": ["bitstamp"] },
+    { "naam": "Bit2Me", "patronen": ["bit2me"] }
+  ]
+}
