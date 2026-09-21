@@ -143,17 +143,17 @@ def _base_layout(fig: go.Figure, hovermode: str = "closest") -> go.Figure:
 
 
 def build_timeline_chart(df_sorted: pd.DataFrame, heeft_tijd: bool) -> go.Figure:
-    """CoinMarketCap-achtige lijn/vlakgrafiek: groen boven het gemiddelde
-    (de stippellijn), rood eronder. Elk punt is één gedetecteerde transactie
-    op zijn exacte moment (datum + tijd, als de CSV die bevat)."""
+    """Eén balk per gedetecteerde transactie, op zijn exacte moment (datum +
+    tijd, als de CSV die bevat). Bewust GEEN rood/groen-onderscheid: dit zijn
+    allemaal uitgaande aankopen naar een crypto-dienst, er is geen koop/verkoop
+    of stijging/daling om mee te contrasteren — dat zou hier misleidend zijn.
+    Een vloeiende lijn tussen de punten zou bovendien een trend suggereren die
+    er niet is (het zijn losse, onregelmatig verspreide gebeurtenissen, geen
+    continue reeks) — vandaar losse balken i.p.v. een lijn/vlakgrafiek."""
 
     x = df_sorted["Moment"]
     y = df_sorted["Bedrag (EUR)"]
-    baseline = float(y.mean())
-
-    y_above = y.where(y >= baseline, baseline)
-    y_below = y.where(y <= baseline, baseline)
-    marker_kleuren = [CMC_GREEN if v >= baseline else CMC_RED for v in y]
+    gemiddelde = float(y.mean())
 
     hovertemplate = (
         "<b>%{customdata[0]}</b><br>"
@@ -162,46 +162,23 @@ def build_timeline_chart(df_sorted: pd.DataFrame, heeft_tijd: bool) -> go.Figure
     customdata = df_sorted[["Bedrijf", "Omschrijving"]].to_numpy()
 
     fig = go.Figure()
-
-    # Stippellijn op het gemiddelde bedrag, als referentie (zoals CMC's
-    # dotted line bij de startprijs).
-    fig.add_trace(go.Scatter(
-        x=[x.min(), x.max()], y=[baseline, baseline], mode="lines",
-        line=dict(color=CMC_BASELINE, width=1, dash="dot"),
-        hoverinfo="skip",
-    ))
-    fig.add_trace(go.Scatter(
-        x=x, y=y_above, mode="lines", line=dict(color=CMC_GREEN, width=2, shape="spline"),
-        fill="tonexty", fillgradient=dict(
-            type="vertical",
-            colorscale=[[0, "rgba(22,199,132,0.35)"], [1, "rgba(22,199,132,0.0)"]],
-        ),
-        hoverinfo="skip",
-    ))
-    # Baseline opnieuw toevoegen zodat de volgende 'tonexty' hiernaar vult
-    # (i.p.v. naar de vorige groene trace) — standaardtruc voor een
-    # tweekleurige split-fill rond een referentiewaarde.
-    fig.add_trace(go.Scatter(
-        x=[x.min(), x.max()], y=[baseline, baseline], mode="lines",
-        line=dict(color=CMC_BASELINE, width=1, dash="dot"),
-        hoverinfo="skip",
-    ))
-    fig.add_trace(go.Scatter(
-        x=x, y=y_below, mode="lines", line=dict(color=CMC_RED, width=2, shape="spline"),
-        fill="tonexty", fillgradient=dict(
-            type="vertical",
-            colorscale=[[0, "rgba(234,57,67,0.0)"], [1, "rgba(234,57,67,0.35)"]],
-        ),
-        hoverinfo="skip",
-    ))
-    # Onzichtbare "echte" laag: exacte punten + hover met bedrijf, bedrag,
-    # omschrijving en volledige datum+tijd.
-    fig.add_trace(go.Scatter(
-        x=x, y=y, mode="markers", marker=dict(color=marker_kleuren, size=7),
+    fig.add_trace(go.Bar(
+        x=x, y=y, marker=dict(color=CMC_GREEN), marker_cornerradius=4,
+        width=1000 * 60 * 60 * 24 * 3,  # ~3 dagen breed in ms, blijft zichtbaar over jaren
         customdata=customdata, hovertemplate=hovertemplate,
     ))
+    fig.add_trace(go.Scatter(
+        x=[x.min(), x.max()], y=[gemiddelde, gemiddelde], mode="lines",
+        line=dict(color=CMC_BASELINE, width=1, dash="dot"),
+        hoverinfo="skip",
+    ))
+    fig.add_annotation(
+        x=x.max(), y=gemiddelde, xanchor="right", yanchor="bottom",
+        text=f"gemiddeld: € {gemiddelde:,.2f}", showarrow=False,
+        font=dict(color=CMC_TEXT, size=11),
+    )
 
-    fig = _base_layout(fig, hovermode="x unified")
+    fig = _base_layout(fig, hovermode="closest")
     fig.update_xaxes(hoverformat="%d %b %Y, %H:%M" if heeft_tijd else "%d %b %Y")
     return fig
 
