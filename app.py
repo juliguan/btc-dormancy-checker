@@ -7,7 +7,7 @@ Start met:
 
 from __future__ import annotations
 
-import tempfile
+import io
 from pathlib import Path
 
 import pandas as pd
@@ -108,12 +108,16 @@ with st.sidebar:
     )
 
 
-def _resolve_input_path() -> Path | None:
+def _resolve_csv_source() -> Path | io.StringIO | None:
+    """Geeft de bron voor load_dashboard_rows terug. Een upload wordt NOOIT
+    naar schijf geschreven — alleen naar een in-memory tekst-stream, die na
+    deze run gewoon door Python's garbage collector wordt opgeruimd. Alleen
+    de meegeleverde voorbeeld-CSV (onderdeel van deze repo) is een echt pad
+    op schijf."""
+
     if uploaded_file is not None:
-        tmp = tempfile.NamedTemporaryFile(delete=False, suffix=".csv")
-        tmp.write(uploaded_file.getvalue())
-        tmp.close()
-        return Path(tmp.name)
+        tekst = uploaded_file.getvalue().decode("utf-8-sig")
+        return io.StringIO(tekst)
     if use_example:
         return EXAMPLE_CSV
     return None
@@ -199,9 +203,9 @@ def build_bar_chart(per_bedrijf: pd.Series) -> go.Figure:
     return _base_layout(fig)
 
 
-input_path = _resolve_input_path()
+csv_source = _resolve_csv_source()
 
-if input_path is None:
+if csv_source is None:
     st.info(
         "Upload links een bank-CSV, of klik op **Gebruik voorbeeld-CSV** om de "
         "dashboard meteen te proberen.\n\n"
@@ -214,7 +218,7 @@ if input_path is None:
     st.stop()
 
 try:
-    dashboard_rows = load_dashboard_rows(input_path)
+    dashboard_rows = load_dashboard_rows(csv_source)
 except Exception as exc:
     st.error(f"Kan CSV niet inlezen: {exc}")
     st.stop()

@@ -5,7 +5,7 @@ from __future__ import annotations
 import csv
 from datetime import date, datetime
 from pathlib import Path
-from typing import List
+from typing import List, TextIO, Union
 
 from .models import BankRow, DashboardRow
 
@@ -94,34 +94,46 @@ def load_bank_rows(csv_path: Path, service_filter: str | None = None) -> List[Ba
     return rows
 
 
-def load_dashboard_rows(csv_path: Path) -> List[DashboardRow]:
+def _read_dashboard_rows(f: TextIO) -> List[DashboardRow]:
+    rows: List[DashboardRow] = []
+    reader = csv.DictReader(f)
+    required = {"datum", "bedrag_eur", "omschrijving"}
+    missing = required - set(h.strip().lower() for h in (reader.fieldnames or []))
+    if missing:
+        raise ValueError(
+            f"CSV mist verplichte kolommen: {missing}. "
+            f"Gevonden kolommen: {reader.fieldnames}"
+        )
+
+    for i, raw_row in enumerate(reader):
+        normalized = {k.strip().lower(): v for k, v in raw_row.items()}
+        omschrijving = (normalized.get("omschrijving") or "").strip()
+        moment, heeft_tijd = parse_datetime_flexible(normalized["datum"])
+
+        rows.append(
+            DashboardRow(
+                row_index=i,
+                moment=moment,
+                heeft_tijd=heeft_tijd,
+                bedrag_eur=_parse_bedrag(normalized["bedrag_eur"]),
+                omschrijving=omschrijving,
+            )
+        )
+    return rows
+
+
+def load_dashboard_rows(csv_source: Union[Path, str, TextIO]) -> List[DashboardRow]:
     """Zelfde CSV-inleeslogica als load_bank_rows, maar behoudt een
     eventuele tijd-component (i.p.v. hem af te kappen tot een datum) voor
-    gebruik in de dashboard-charts."""
+    gebruik in de dashboard-charts.
 
-    rows: List[DashboardRow] = []
-    with open(csv_path, "r", encoding="utf-8-sig", newline="") as f:
-        reader = csv.DictReader(f)
-        required = {"datum", "bedrag_eur", "omschrijving"}
-        missing = required - set(h.strip().lower() for h in (reader.fieldnames or []))
-        if missing:
-            raise ValueError(
-                f"CSV mist verplichte kolommen: {missing}. "
-                f"Gevonden kolommen: {reader.fieldnames}"
-            )
+    `csv_source` mag een bestandspad zijn, of een al-geopende tekst-stream
+    (bv. `io.StringIO`) — dat laatste gebruikt het Streamlit-dashboard voor
+    een geüploade CSV, zodat die nooit naar schijf geschreven hoeft te
+    worden en alleen in het geheugen van het proces blijft."""
 
-        for i, raw_row in enumerate(reader):
-            normalized = {k.strip().lower(): v for k, v in raw_row.items()}
-            omschrijving = (normalized.get("omschrijving") or "").strip()
-            moment, heeft_tijd = parse_datetime_flexible(normalized["datum"])
+    if hasattr(csv_source, "read"):
+        return _read_dashboard_rows(csv_source)  # type: ignore[arg-type]
 
-            rows.append(
-                DashboardRow(
-                    row_index=i,
-                    moment=moment,
-                    heeft_tijd=heeft_tijd,
-                    bedrag_eur=_parse_bedrag(normalized["bedrag_eur"]),
-                    omschrijving=omschrijving,
-                )
-            )
-    return rows
+    with open(csv_source, "r", encoding="utf-8-sig", newline="") as f:
+        return _read_dashboard_rows(f)
