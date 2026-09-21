@@ -82,7 +82,7 @@ st.info(
 with st.sidebar:
     st.header("Invoer")
     uploaded_file = st.file_uploader("Bank-CSV (datum, bedrag_eur, omschrijving)", type=["csv"])
-    use_example = st.button("Gebruik voorbeeld-CSV", use_container_width=True)
+    use_example = st.button("Gebruik voorbeeld-CSV", width="stretch")
     st.caption(
         "Alleen lokale verwerking — zie de privacy-uitleg hierboven en in de README."
     )
@@ -262,16 +262,16 @@ if not heeft_tijd:
 
 st.markdown("#### Bedrag per bedrijf")
 per_bedrijf = df.groupby("Bedrijf")["Bedrag (EUR)"].sum().sort_values(ascending=False)
-st.plotly_chart(build_bar_chart(per_bedrijf), use_container_width=True, config={"displayModeBar": False})
+st.plotly_chart(build_bar_chart(per_bedrijf), width="stretch", config={"displayModeBar": False})
 
 st.markdown("#### Transacties over tijd")
-st.plotly_chart(build_timeline_chart(df, heeft_tijd), use_container_width=True, config={"displayModeBar": False})
+st.plotly_chart(build_timeline_chart(df, heeft_tijd), width="stretch", config={"displayModeBar": False})
 
 st.markdown("#### Alle gedetecteerde transacties")
 tabel_df = df.rename(columns={"Moment": "Datum & tijd"})
 st.dataframe(
     tabel_df,
-    use_container_width=True,
+    width="stretch",
     hide_index=True,
     column_config={
         "Bedrag (EUR)": st.column_config.NumberColumn(format="€ %.2f"),
@@ -286,7 +286,7 @@ st.download_button(
     tabel_df.to_csv(index=False).encode("utf-8"),
     file_name="gedetecteerde_crypto_transacties.csv",
     mime="text/csv",
-    use_container_width=False,
+    width="content",
 )
 
 st.caption(
