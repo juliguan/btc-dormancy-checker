@@ -3,7 +3,7 @@
 from __future__ import annotations
 
 from dataclasses import dataclass, field
-from datetime import date
+from datetime import date, datetime
 from typing import Optional
 
 
@@ -13,6 +13,19 @@ class BankRow:
 
     row_index: int
     datum: date
+    bedrag_eur: float
+    omschrijving: str
+
+
+@dataclass
+class DashboardRow:
+    """Zelfde als BankRow, maar met tijd-component behouden (voor de
+    Streamlit-dashboard-charts) i.p.v. afgekapt tot een datum. Als de CSV
+    geen tijd bevat, staat `moment` op middernacht en is `heeft_tijd` False."""
+
+    row_index: int
+    moment: datetime
+    heeft_tijd: bool
     bedrag_eur: float
     omschrijving: str
 

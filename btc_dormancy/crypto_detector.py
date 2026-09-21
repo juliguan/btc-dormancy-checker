@@ -12,9 +12,11 @@ from __future__ import annotations
 import json
 from dataclasses import dataclass
 from pathlib import Path
-from typing import List, Optional
+from typing import List, Optional, Union
 
-from .models import BankRow
+from .models import BankRow, DashboardRow
+
+AnyBankRow = Union[BankRow, DashboardRow]
 
 
 @dataclass
@@ -29,7 +31,7 @@ class CryptoCompany:
 
 @dataclass
 class DetectedTransaction:
-    bank_row: BankRow
+    bank_row: AnyBankRow
     bedrijf: str
 
 
@@ -50,7 +52,7 @@ def load_crypto_companies(path: Optional[Path] = None) -> List[CryptoCompany]:
 
 
 def detect_crypto_transactions(
-    bank_rows: List[BankRow], companies: List[CryptoCompany]
+    bank_rows: List[AnyBankRow], companies: List[CryptoCompany]
 ) -> List[DetectedTransaction]:
     """Voor elke bankregel: het eerst-matchende bedrijf uit de lijst (indien
     meerdere patronen matchen, telt de eerste treffer in volgorde van de

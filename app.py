@@ -11,13 +11,22 @@ import tempfile
 from pathlib import Path
 
 import pandas as pd
+import plotly.graph_objects as go
 import streamlit as st
 
-from btc_dormancy.bank_csv import load_bank_rows
+from btc_dormancy.bank_csv import load_dashboard_rows
 from btc_dormancy.crypto_detector import detect_crypto_transactions, load_crypto_companies
 
 PROJECT_ROOT = Path(__file__).resolve().parent
 EXAMPLE_CSV = PROJECT_ROOT / "data" / "voorbeeld_transacties.csv"
+
+# CoinMarketCap-achtig kleurenpalet.
+CMC_GREEN = "#16C784"
+CMC_RED = "#EA3943"
+CMC_GRID = "rgba(255,255,255,0.06)"
+CMC_BASELINE = "rgba(255,255,255,0.35)"
+CMC_TEXT = "#B0B6C3"
+CMC_FONT = "'Inter', 'Segoe UI', -apple-system, sans-serif"
 
 st.set_page_config(
     page_title="BTC Dormancy Checker",
@@ -36,7 +45,7 @@ st.markdown(
         padding: 16px 16px 8px 16px;
     }
     div[data-testid="stMetricValue"] {
-        color: #F7931A;
+        color: #16C784;
     }
     .company-pill {
         display: inline-block;
@@ -46,6 +55,12 @@ st.markdown(
         padding: 2px 12px;
         font-size: 0.85em;
         font-weight: 600;
+    }
+    div[data-testid="stPlotlyChart"] {
+        background-color: #171B24;
+        border: 1px solid #262B36;
+        border-radius: 10px;
+        padding: 8px;
     }
     </style>
     """,
@@ -104,6 +119,103 @@ def _resolve_input_path() -> Path | None:
     return None
 
 
+def _base_layout(fig: go.Figure, hovermode: str = "closest") -> go.Figure:
+    fig.update_layout(
+        paper_bgcolor="rgba(0,0,0,0)",
+        plot_bgcolor="rgba(0,0,0,0)",
+        font=dict(family=CMC_FONT, color=CMC_TEXT, size=13),
+        margin=dict(l=10, r=10, t=10, b=10),
+        hoverlabel=dict(
+            bgcolor="#1E2330", font_color="#E6E6E6", bordercolor="#262B36"
+        ),
+        hovermode=hovermode,
+        showlegend=False,
+        xaxis=dict(
+            gridcolor=CMC_GRID, zeroline=False, showline=False,
+            tickfont=dict(color=CMC_TEXT),
+        ),
+        yaxis=dict(
+            gridcolor=CMC_GRID, zeroline=False, showline=False,
+            tickfont=dict(color=CMC_TEXT), tickprefix="€ ",
+        ),
+    )
+    return fig
+
+
+def build_timeline_chart(df_sorted: pd.DataFrame, heeft_tijd: bool) -> go.Figure:
+    """CoinMarketCap-achtige lijn/vlakgrafiek: groen boven het gemiddelde
+    (de stippellijn), rood eronder. Elk punt is één gedetecteerde transactie
+    op zijn exacte moment (datum + tijd, als de CSV die bevat)."""
+
+    x = df_sorted["Moment"]
+    y = df_sorted["Bedrag (EUR)"]
+    baseline = float(y.mean())
+
+    y_above = y.where(y >= baseline, baseline)
+    y_below = y.where(y <= baseline, baseline)
+    marker_kleuren = [CMC_GREEN if v >= baseline else CMC_RED for v in y]
+
+    hovertemplate = (
+        "<b>%{customdata[0]}</b><br>"
+        "€ %{y:,.2f} — %{customdata[1]}<extra></extra>"
+    )
+    customdata = df_sorted[["Bedrijf", "Omschrijving"]].to_numpy()
+
+    fig = go.Figure()
+
+    # Stippellijn op het gemiddelde bedrag, als referentie (zoals CMC's
+    # dotted line bij de startprijs).
+    fig.add_trace(go.Scatter(
+        x=[x.min(), x.max()], y=[baseline, baseline], mode="lines",
+        line=dict(color=CMC_BASELINE, width=1, dash="dot"),
+        hoverinfo="skip",
+    ))
+    fig.add_trace(go.Scatter(
+        x=x, y=y_above, mode="lines", line=dict(color=CMC_GREEN, width=2, shape="spline"),
+        fill="tonexty", fillgradient=dict(
+            type="vertical",
+            colorscale=[[0, "rgba(22,199,132,0.35)"], [1, "rgba(22,199,132,0.0)"]],
+        ),
+        hoverinfo="skip",
+    ))
+    # Baseline opnieuw toevoegen zodat de volgende 'tonexty' hiernaar vult
+    # (i.p.v. naar de vorige groene trace) — standaardtruc voor een
+    # tweekleurige split-fill rond een referentiewaarde.
+    fig.add_trace(go.Scatter(
+        x=[x.min(), x.max()], y=[baseline, baseline], mode="lines",
+        line=dict(color=CMC_BASELINE, width=1, dash="dot"),
+        hoverinfo="skip",
+    ))
+    fig.add_trace(go.Scatter(
+        x=x, y=y_below, mode="lines", line=dict(color=CMC_RED, width=2, shape="spline"),
+        fill="tonexty", fillgradient=dict(
+            type="vertical",
+            colorscale=[[0, "rgba(234,57,67,0.0)"], [1, "rgba(234,57,67,0.35)"]],
+        ),
+        hoverinfo="skip",
+    ))
+    # Onzichtbare "echte" laag: exacte punten + hover met bedrijf, bedrag,
+    # omschrijving en volledige datum+tijd.
+    fig.add_trace(go.Scatter(
+        x=x, y=y, mode="markers", marker=dict(color=marker_kleuren, size=7),
+        customdata=customdata, hovertemplate=hovertemplate,
+    ))
+
+    fig = _base_layout(fig, hovermode="x unified")
+    fig.update_xaxes(hoverformat="%d %b %Y, %H:%M" if heeft_tijd else "%d %b %Y")
+    return fig
+
+
+def build_bar_chart(per_bedrijf: pd.Series) -> go.Figure:
+    fig = go.Figure(go.Bar(
+        x=per_bedrijf.index, y=per_bedrijf.values,
+        marker=dict(color=CMC_GREEN),
+        marker_cornerradius=6,
+        hovertemplate="<b>%{x}</b><br>€ %{y:,.2f}<extra></extra>",
+    ))
+    return _base_layout(fig)
+
+
 input_path = _resolve_input_path()
 
 if input_path is None:
@@ -111,66 +223,80 @@ if input_path is None:
         "Upload links een bank-CSV, of klik op **Gebruik voorbeeld-CSV** om de "
         "dashboard meteen te proberen.\n\n"
         "Verwacht formaat:\n```csv\ndatum,bedrag_eur,omschrijving\n"
-        "2013-11-15,50.00,Bitonic BTC aankoop\n```"
+        "2013-11-15,50.00,Bitonic BTC aankoop\n```\n\n"
+        "Bevat je `datum`-kolom ook een tijd (bv. `2013-11-15 14:32`)? Dan "
+        "wordt die getoond in de grafieken — handig om transacties exact te "
+        "kunnen natrekken."
     )
     st.stop()
 
 try:
-    bank_rows = load_bank_rows(input_path, service_filter=None)
+    dashboard_rows = load_dashboard_rows(input_path)
 except Exception as exc:
     st.error(f"Kan CSV niet inlezen: {exc}")
     st.stop()
 
 active_companies = [c for c in all_companies if c.naam in selected_names]
-detected = detect_crypto_transactions(bank_rows, active_companies)
+detected = detect_crypto_transactions(dashboard_rows, active_companies)
 
 st.subheader("Resultaat")
 
 if not detected:
     st.warning(
-        f"Geen van de {len(bank_rows)} bankregel(s) matcht een geselecteerd crypto-bedrijf."
+        f"Geen van de {len(dashboard_rows)} bankregel(s) matcht een geselecteerd crypto-bedrijf."
     )
     st.stop()
+
+heeft_tijd = any(d.bank_row.heeft_tijd for d in detected)
 
 df = pd.DataFrame(
     [
         {
-            "Datum": d.bank_row.datum,
+            "Moment": d.bank_row.moment,
             "Bedrag (EUR)": d.bank_row.bedrag_eur,
             "Omschrijving": d.bank_row.omschrijving,
             "Bedrijf": d.bedrijf,
         }
         for d in detected
     ]
-).sort_values("Datum")
+).sort_values("Moment")
 
 col1, col2, col3 = st.columns(3)
 col1.metric("Gedetecteerde transacties", len(df))
 col2.metric("Totaalbedrag", f"€ {df['Bedrag (EUR)'].sum():,.2f}")
 col3.metric("Unieke bedrijven", df["Bedrijf"].nunique())
 
+if not heeft_tijd:
+    st.caption(
+        "ℹ️ Geen tijd-component gevonden in de `datum`-kolom — punten hieronder "
+        "staan op middernacht. Voeg een tijd toe aan je CSV (bv. "
+        "`2013-11-15 14:32`) voor preciezere weergave."
+    )
+
 st.markdown("#### Bedrag per bedrijf")
 per_bedrijf = df.groupby("Bedrijf")["Bedrag (EUR)"].sum().sort_values(ascending=False)
-st.bar_chart(per_bedrijf, color="#F7931A")
+st.plotly_chart(build_bar_chart(per_bedrijf), use_container_width=True, config={"displayModeBar": False})
 
 st.markdown("#### Transacties over tijd")
-per_datum = df.groupby("Datum")["Bedrag (EUR)"].sum()
-st.area_chart(per_datum, color="#F7931A")
+st.plotly_chart(build_timeline_chart(df, heeft_tijd), use_container_width=True, config={"displayModeBar": False})
 
 st.markdown("#### Alle gedetecteerde transacties")
+tabel_df = df.rename(columns={"Moment": "Datum & tijd"})
 st.dataframe(
-    df,
+    tabel_df,
     use_container_width=True,
     hide_index=True,
     column_config={
         "Bedrag (EUR)": st.column_config.NumberColumn(format="€ %.2f"),
-        "Datum": st.column_config.DateColumn(format="YYYY-MM-DD"),
+        "Datum & tijd": st.column_config.DatetimeColumn(
+            format="YYYY-MM-DD HH:mm" if heeft_tijd else "YYYY-MM-DD"
+        ),
     },
 )
 
 st.download_button(
     "Download als CSV",
-    df.to_csv(index=False).encode("utf-8"),
+    tabel_df.to_csv(index=False).encode("utf-8"),
     file_name="gedetecteerde_crypto_transacties.csv",
     mime="text/csv",
     use_container_width=False,
